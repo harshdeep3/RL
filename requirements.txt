@@ -1,0 +1,11 @@
+
+MetaTrader5
+yfinance
+torch
+stable_baselines3
+sb3_contrib
+pandas_datareader
+pandas
+numpy
+gymnasium
+ta
