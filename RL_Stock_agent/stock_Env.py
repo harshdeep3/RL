@@ -1,9 +1,9 @@
-from stockEnv import StockMarketEnv as GenEnv
+from stockEnv import StockMarketEnv as StockEnv
 import MT5_Link as link
 import MetaTrader5 as mt5
 
 
-class Env(GenEnv):
+class Env(StockEnv):
     """
 
     This is a wrapper around the Environment, this allows the stable baseline3 to create multiple environment.
