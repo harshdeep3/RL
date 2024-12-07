@@ -12,7 +12,6 @@ import pandas as pd
 import pandas_datareader as web
 import datetime
 import yfinance as yf
-yf.pdr_override()
 
 from ta.trend import sma_indicator
 from ta.trend import ema_indicator
@@ -109,19 +108,21 @@ class StockMarketEnv(gym.Env):
         self.trade(action)
         # Move to next time step
         self.current_index += 1
-        if self.current_index == 13499:
-            self.reset()
+        if self.current_index == 13498:
+            truncated = True
+        else:
+            truncated = False
 
         self.logger.debug(f"action: {action}, stocks owned: {stock_owned}, cash in hand: {cash_in_hand}, open: {stock_open}, low:" 
                           f"{stock_low}, close: {stock_close}, high: {stock_high}, volume: {stock_vol}, RSI: {stock_rsi},"
                           f"SMA: {stock_sma}, EMA: {stock_ema}")
-        
+
         # Check if done
         done = self.current_index == len(self.data)
         reward = self.get_reward()
         self.total_net = self.get_net()
         # Return observation, reward, done, and info
-        return self.reformat_matrix(self.state), reward, done, False, {}
+        return self.reformat_matrix(self.state), reward, done, truncated, {}
 
     def trade(self, action):
         
@@ -168,7 +169,6 @@ class StockMarketEnv(gym.Env):
     def get_reward(self):
         self.logger.debug("get_reward function - > ")
 
-        print(f"index: {self.current_index}, len of data.close: {len(self.data['close'])}")
         reward = (self.state.owned * self.data['close'].iloc[self.current_index]) + self.cash_in_hand
 
         return reward
