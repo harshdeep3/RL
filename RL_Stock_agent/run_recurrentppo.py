@@ -37,10 +37,9 @@ def main() -> None:
     """
     This creates the agent controller and allows the optuna study to occur. This will get optimised hyperparameter.
     """
-
     # logging
     now = datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')
-    logging.basicConfig(filename=f'RL_Stock_agent/saved_Files/log_files/{now}_RPPO_log.log',
+    logging.basicConfig(filename=f'saved_Files/log_files/{now}_RPPO_log.log',
                         level=LOGGING_LEVEL,
                         format='%(asctime)s :: %(levelname)s :: %(module)s :: %(processName)s'
                                ' :: %(funcName)s :: line #-%(lineno)d :: %(message)s')
@@ -66,15 +65,14 @@ def main() -> None:
         # env = GenEnv(data)
         env = make_vec_env(Env, n_envs=1)
 
-    if os.path.exists("RL_Stock_agent/saved_Files/saved_model/Rec_PPO"):
-        agent = RecurrentPPO.load("RL_Stock_agent/saved_Files/saved_model/Rec_PPO")
+    if os.path.exists("saved_Files/saved_model/Rec_PPO"):
+        agent = RecurrentPPO.load("saved_Files/saved_model/Rec_PPO")
     else:
-        agent = RecurrentPPO('MlpLstmPolicy', env, verbose=1, tensorboard_log="RL_Stock_agent/saved_Files/logs")
-    # running a recurrentPPO agent
-    agent = RecurrentPPO('MlpLstmPolicy', env, verbose=1, tensorboard_log="RL_Stock_agent/saved_Files/logs")
+        # running a recurrentPPO agent
+        agent = RecurrentPPO('MlpLstmPolicy', env, verbose=1, tensorboard_log="saved_Files/logs", device="cuda")
     
     # train the agent 
-    agent.learn(total_timesteps=10, callback=CustomCallback())
+    agent.learn(total_timesteps=10000000, callback=CustomCallback())
     
     # save the trained agent
     agent.save("RL_Stock_agent/saved_Files/saved_model/Rec_PPO")
