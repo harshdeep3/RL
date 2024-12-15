@@ -1,16 +1,14 @@
 import numpy as np
 
 from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.callbacks import BaseCallback
 
 import datetime
 import os
 import logging
 from stock_Env import Env
-import MT5_Link as link
+from RL_Stock_agent.mt5 import MT5_Link as link
 import MetaTrader5 as mt5
-from stockEnv import StockMarketEnv as GenEnv
 from stable_baselines3.common.env_util import make_vec_env
 
 
@@ -53,7 +51,7 @@ def main() -> None:
     end = datetime.datetime.now().strftime("%Y-%m-%d")
 
     timeframe = mt5.TIMEFRAME_D1
-    symbol = 'USDJPY'
+    symbol = 'BTCUSD'
     count = 13500  # get 8500 data points
 
     # env = make_vec_env(Env, n_envs=4)
