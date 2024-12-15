@@ -1,17 +1,13 @@
 import gymnasium as gym
 from gymnasium import spaces
 from collections import namedtuple
-from stable_baselines3 import DQN
-from stable_baselines3.common.env_checker import check_env
 import logging
 
-import MT5_Link as link
+from RL_Stock_agent.mt5 import MT5_Link as link
 import MetaTrader5 as mt5
 import numpy as np
-import pandas as pd
 import pandas_datareader as web
 import datetime
-import yfinance as yf
 
 from ta.trend import sma_indicator
 from ta.trend import ema_indicator

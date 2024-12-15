@@ -1,5 +1,5 @@
 from stockEnv import StockMarketEnv as StockEnv
-import MT5_Link as link
+from RL_Stock_agent.mt5 import MT5_Link as link
 import MetaTrader5 as mt5
 
 
