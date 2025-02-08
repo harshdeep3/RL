@@ -1,4 +1,4 @@
-from RL_Stock_agent.mt5 import MT5_Link as link
+from mt5 import MT5_Link as link
 import MetaTrader5 as mt5
 import datetime
 
@@ -9,7 +9,18 @@ from ta.momentum import RSIIndicator
 
 def main() -> None:
     """
-    This creates the agent controller and allows the optuna study to occur. This will get optimised hyperparameter.
+    Main execution function for setting up and analyzing financial market data. This
+    function includes logging initialization, fetching historical data using MetaTrader 5
+    (MT5), and calculating various financial indicators such as Simple Moving Average
+    (SMA), Exponential Moving Average (EMA), and Relative Strength Index (RSI). The
+    entire process aims to prepare financial data for further downstream analysis or
+    implementation in ML/AI systems.
+
+    Args:
+        None
+
+    Returns:
+        None
     """
 
     # logging

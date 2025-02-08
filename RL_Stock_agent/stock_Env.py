@@ -1,24 +1,32 @@
 from stockEnv import StockMarketEnv as StockEnv
-from RL_Stock_agent.mt5 import MT5_Link as link
-import MetaTrader5 as mt5
+from mt5 import MT5_Link as link
 
 
 class Env(StockEnv):
     """
+    Represents a custom environment extending the StockEnv class.
 
-    This is a wrapper around the Environment, this allows the stable baseline3 to create multiple environment.
+    This class is a specialized environment, tailored for use with MetaTrader 5 (MT5),
+    to handle operations related to financial instruments trading. It establishes
+    a connection to MT5, retrieves account information, and initializes the environment
+    for the specified financial symbol. It depends on an external MT5Class for
+    performing all MT5-related operations.
 
+    Attributes:
+        mt5_obj (MT5Class): An instance of the MT5Class responsible for handling
+            connection, login, and account information retrieval for MT5.
+        symbol (str): The financial instrument symbol that the environment operates on.
+            Defaults to "BTCUSD".
     """
 
-    def __init__(self, timeframe=mt5.TIMEFRAME_D1, symbol='USDJPY', count=13500):
+    def __init__(self):
 
-        # get historic data 
-        data = link.get_historic_data(fx_symbol=symbol, fx_timeframe=timeframe, fx_count=count)
-        # set time as index
-        data = data.set_index('time')
-        
-        if data is None:
-            print("Error: Data not recieved!")
-        else:
-            super(Env, self).__init__(data)
+        # mt5 connection
+        mt5_obj = link.MT5Class()
+        mt5_obj.login_to_metatrader()
+        mt5_obj.get_acc_info()
+
+        symbol = "BTCUSD"
+
+        super(Env, self).__init__(mt5_obj, symbol)
 
