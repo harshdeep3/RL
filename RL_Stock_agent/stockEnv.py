@@ -1,10 +1,11 @@
-from typing import Tuple
+from typing import Tuple, Any
 
 import gymnasium as gym
 from gymnasium import spaces
 from collections import namedtuple
 import logging
 import pandas as pd
+from numpy import ndarray
 
 from mt5 import MT5_Link as link
 import MetaTrader5 as mt5
@@ -25,7 +26,6 @@ SMA_TIME = 20
 EMA_TIME = 20
 RSI_TIME = 14
 
-LOGGING_LEVEL = logging.DEBUG
 
 
 def get_yahoo_data(stock_name: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -81,31 +81,35 @@ class StockMarketEnv(gym.Env):
     """
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, mt5_obj: link.MT5Class, symbol: str):
+    def __init__(self, mt5_obj: link.MT5Class, symbol: str, logging_level: int = logging.DEBUG):
         super(StockMarketEnv, self).__init__()
                 
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(LOGGING_LEVEL)
+        self.logger.setLevel(logging_level)
 
         self.mt5_obj = mt5_obj
         self.symbol = symbol
         self.timeframe = mt5.TIMEFRAME_M5
 
+        # store previous buy/sell position id
+        self.buy_position_id = None
+        self.sell_position_id = None
+
         # getting historic data
         fx_count = 13000
-        historic_data = link.get_historic_data(self.symbol, self.timeframe, fx_count)
+        historic_data = mt5_obj.get_historic_data(self.symbol, self.timeframe, fx_count)
         self.all_time_high = historic_data['close'].max()
 
         # prepare the buy request structure-
         self.symbol_info = mt5.symbol_info(symbol)
         if self.symbol_info is None:
-            print(symbol, "not found, can not call order_check()")
+            self.logger.error(f"{symbol} not found, can not call order_check()")
             mt5.shutdown()
             quit()
 
         # Define action and observation spaces
         self.action_space = spaces.Discrete(5)
-        self.observation_space = spaces.Box(low=0, high=1, shape=(10,), dtype=np.float64)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(12,), dtype=np.float64)
 
         self.state = self.get_obs()
 
@@ -153,7 +157,7 @@ class StockMarketEnv(gym.Env):
 
         # getting historic data
         fx_count = max([RSI_TIME, SMA_TIME, EMA_TIME])
-        historic_data = link.get_historic_data(self.symbol, self.timeframe, fx_count)
+        historic_data = mt5_obj.get_historic_data(self.symbol, self.timeframe, fx_count)
 
         # get indicator data
         rsi = RSIIndicator(historic_data['close'], window=RSI_TIME, fillna=True).rsi().to_numpy()[-1]
@@ -221,7 +225,7 @@ class StockMarketEnv(gym.Env):
 
         # getting historic data
         fx_count = max([RSI_TIME, SMA_TIME, EMA_TIME])
-        historic_data = link.get_historic_data(self.symbol, self.timeframe, fx_count)
+        historic_data = mt5_obj.get_historic_data(self.symbol, self.timeframe, fx_count)
 
         # get indicator data
         rsi = RSIIndicator(historic_data['close'], window=RSI_TIME, fillna=True).rsi().to_numpy()[-1]
@@ -259,46 +263,79 @@ class StockMarketEnv(gym.Env):
             action (int): The trade action where 0 represents a sell action, and 2 represents a buy action.
 
         """
-        # TODO -> send a trade this function
-        cash_in_hand = self.cash_in_hand
+        # prepare the request structure
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            self.logger.error(f"{symbol} not found, can not call order_check()")
+            mt5.shutdown()
+            quit()
 
-        allactions = []
-        sell_index = []
-        buy_index = []
+        # if the symbol is unavailable in MarketWatch, add it
+        if not symbol_info.visible:
+            self.logger.error(f"{symbol} is not visible, trying to switch on")
+            if not mt5.symbol_select(symbol, True):
+                self.logger.error(f"symbol_select({symbol}) failed, exit")
+                mt5.shutdown()
+                quit()
 
-        if action == 0:
-            # sell stocks
-            sell_index.append(1)
-        elif action == 2:
-            # buy stocks
-            buy_index.append(1)
+        lot = 0.01  # lot to buy for bitcoin
+        point = symbol_info.point
+        deviation = 20
 
-        if sell_index:
-            cash_in_hand += self.state.close * self.state.owned
-            owned = 0
-            # make update obs_namedtyple function
-            self.update_obs(cash_in_hand=cash_in_hand, owned=owned)
-            
-        elif buy_index:
-            can_buy = True
-            while can_buy:
-                owned = self.state.owned
-                for _ in buy_index:
-                    # buy a single stock on loop
-                    # if there are multiple stocks then the loop iterates over each stock and buys 1 stock
-                    # (if it can) for the stocks available each iteration.
-                    if self.state.cash_in_hand > self.state.close:
-                        owned += 1  # buy one share
-                        cash_in_hand -= self.state.close
-                        
-                        self.update_obs(owned=owned, cash_in_hand=cash_in_hand)
-                    else:
-                        # if the cash left is lower the stock price then stop buying
-                        can_buy = False
+        if action == 1 : # buy
+            # get price to buy at
+            price = symbol_info.ask
+
+            # take profit and stop loss
+            tp = price + 100000 * point
+            sl = price - 100000 * point
+            # execute the position
+            result = self.mt5_obj.buy_symbol(symbol=self.symbol, price=price, lot=lot, sl=sl, tp=tp,
+                                             deviation=deviation)
+
+            self.buy_position_id = result.order
+        elif action == 2:  # close buy
+            # get price to sell at
+            price = symbol_info.bid
+
+            if self.buy_position_id is not None:
+                # execute the position
+                result = self.mt5_obj.close_buy_position(symbol=symbol, price=price, lot=lot, deviation=deviation,
+                                                         position_id=self.buy_position_id)
+            else:
+                self.logger.error(f"self.buy_position_id is None, action: {action}")
+
+        elif action == 3:  # sell
+            # get price to sell at
+            price = symbol_info.bid
+
+            # take profit and stop loss
+            tp = price + 100000 * point
+            sl = price - 100000 * point
+
+            # execute the position
+            result = self.mt5_obj.sell_symbol(symbol=self.symbol, price=price, lot=lot, sl=sl, tp = tp,
+                                              deviation=deviation)
+
+            self.self_position_id = result.order
+        elif action == 4:  # close sell
+            # get price to buy at
+            price = symbol_info.ask
+
+            if self.sell_position_id is not None:
+                # execute the position
+                result = self.mt5_obj.close_sell_position(symbol=symbol, price=price, lot=lot, deviation=deviation,
+                                                          position_id=self.sell_position_id)
+            else:
+                self.logger.error(f"self.buy_position_id is None, action: {action}")
+        else:
+            if action != 0:
+                raise ValueError("Invalid action")
+            else: # hold -> no buying or selling7
+                pass
+
         
-        self.cash_in_hand = cash_in_hand
-        
-        self.logger.debug(f"action: {action}, cash in hand: {cash_in_hand}, state cash in hand: {self.state.cash_in_hand}, owned: {self.state.owned}")
+        self.logger.debug(f"action: {action}")
 
     def get_reward(self) -> float:
 
@@ -319,7 +356,7 @@ class StockMarketEnv(gym.Env):
 
         return reward
 
-    def reset(self, seed: int = None, **kwargs) -> np.ndarray:
+    def reset(self, seed: int = None, **kwargs) -> tuple[ndarray, dict[Any, Any]]:
 
         """
             Resets the environment state and initializes various data structures and metrics required for trading simulation.
@@ -375,44 +412,9 @@ class StockMarketEnv(gym.Env):
 
         self.logger.debug(f"obs: {obs}")
 
-        return obs
+        return obs, {}
 
-        # Reset state, reward, and current index
-        self.reward = 0
-        self.current_index = 1
 
-        info = {}
-
-        stock_owned = 0
-        
-        stock_open = self.data['open'].iloc[self.current_index]
-        stock_high = self.data['high'].iloc[self.current_index]
-        stock_low = self.data['low'].iloc[self.current_index]
-        stock_close = self.data['close'].iloc[self.current_index]
-        stock_vol = self.data['tick_volume'].iloc[self.current_index]
-        cash_in_hand = 200
-        
-        #todo add % change
-        # self.state[-1] = self.data.iloc[self.current_index]["pct_change"]
-
-        stock_rsi = self.rsi.iloc[self.current_index]
-
-        # as this use previous data to get the current value, this can be nan
-        # at the first few time steps, this is to remove them
-        stock_sma = self.sma.iloc[self.current_index]
-
-        stock_ema = self.ema.iloc[self.current_index]
-
-        self.state = obs_namedtuple(owned=stock_owned, open=stock_open, low=stock_low, close=stock_close,
-                                    high=stock_high, volume=stock_vol, sma=stock_sma, ema=stock_ema, rsi=stock_rsi,
-                                    cash_in_hand=cash_in_hand)
-        
-        self.total_net = self.get_net()
-        state_output = self.reformat_matrix(self.state)
-        self.logger.debug(f"stocks owned: {stock_owned}, cash in hand: {cash_in_hand}, open: {stock_open}, low:"
-                        f"{stock_low}, close: {stock_close}, high: {stock_high}, volume: {stock_vol}, RSI: {stock_rsi},"
-                        f"SMA: {stock_sma}, EMA: {stock_ema}")
-        return state_output, info
 
     def reformat_matrix(self, state: obs_namedtuple) -> np.ndarray:
 
@@ -470,49 +472,6 @@ class StockMarketEnv(gym.Env):
                           f"SMA: {sma} ({norm_sma}), EMA: {ema} ({norm_ema})")
         
         return row_matrix
-
-    def update_obs(self, owned=None, stock_open=None, low=None, close=None, high=None, volume=None,
-                   rsi=None, sma=None, ema=None, cash_in_hand=None):
-        
-        if owned is None:
-            owned = self.state.owned
-
-        if stock_open is None:
-            stock_open = self.state.open
-
-        if low is None:
-            low = self.state.low
-
-        if close is None:
-            close = self.state.close
-
-        if high is None:
-            high = self.state.high
-
-        if volume is None:
-            volume = self.state.volume
-
-        if rsi is None:
-            if not np.isnan(self.state.rsi):
-                rsi = self.state.rsi
-
-        if sma is None:
-            if not np.isnan(self.state.sma):
-                sma = self.state.sma
-
-        if ema is None:
-            if not np.isnan(self.state.ema):
-                ema = self.state.ema
-
-        if cash_in_hand is None:
-            cash_in_hand = self.state.cash_in_hand
-
-        self.logger.debug(f"stocks owned: {owned}, cash in hand: {cash_in_hand}, open: {stock_open}, low:"
-                        f"{low}, close: {close}, high: {high}, volume: {volume}, RSI: {rsi},"
-                        f"SMA: {sma}, EMA: {ema}")
-        
-        self.state = obs_namedtuple(owned=owned, open=stock_open, low=low, close=close, high=high,
-                                    volume=volume, sma=sma, ema=ema, rsi=rsi, cash_in_hand=cash_in_hand)
 
 
 if __name__ == '__main__':

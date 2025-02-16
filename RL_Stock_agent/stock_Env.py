@@ -1,5 +1,6 @@
 from stockEnv import StockMarketEnv as StockEnv
 from mt5 import MT5_Link as link
+import logging
 
 
 class Env(StockEnv):
@@ -19,14 +20,14 @@ class Env(StockEnv):
             Defaults to "BTCUSD".
     """
 
-    def __init__(self):
+    def __init__(self, logging_level: int = logging.DEBUG):
 
         # mt5 connection
-        mt5_obj = link.MT5Class()
+        mt5_obj = link.MT5Class(logging_level=logging_level)
         mt5_obj.login_to_metatrader()
         mt5_obj.get_acc_info()
 
         symbol = "BTCUSD"
 
-        super(Env, self).__init__(mt5_obj, symbol)
+        super(Env, self).__init__(mt5_obj, symbol, logging_level)
 

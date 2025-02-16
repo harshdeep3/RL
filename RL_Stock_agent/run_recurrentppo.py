@@ -86,8 +86,12 @@ def main() -> None:
                         level=LOGGING_LEVEL,
                         format='%(asctime)s :: %(levelname)s :: %(module)s :: %(processName)s'
                                ' :: %(funcName)s :: line #-%(lineno)d :: %(message)s')
+    k_args = {
+        "logging_level": LOGGING_LEVEL
+    }
+
     # env = GenEnv(data)
-    env = make_vec_env(Env, n_envs=1)
+    env = make_vec_env(Env, n_envs=1, vec_env_kwargs=k_args)
 
     if os.path.exists("saved_Files/saved_model/Rec_PPO"):
         agent = RecurrentPPO.load("saved_Files/saved_model/Rec_PPO")
@@ -111,17 +115,7 @@ def main() -> None:
     for _ in range(15):
         action, _ = agent.predict(obs)
         obs, rewards, _, _ = env.step(action)
-        
     
 
 if __name__ == '__main__':
     main()
-    
-    #logging
-    now = datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S')
-    logging.basicConfig(filename=f'saved_Files/log_files/{now}.log',
-                        level=LOGGING_LEVEL,
-                        format='%(asctime)s :: %(levelname)s :: %(module)s :: %(processName)s'
-                               ' :: %(funcName)s :: line #%(lineno)d :: %(message)s')
-
-
